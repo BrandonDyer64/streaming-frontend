@@ -222,11 +222,26 @@ async fn main_loop(surface: GlfwSurface) {
                     state.selected_card.0 = state.selected_card.0.saturating_sub(1);
                 }
                 WindowEvent::Key(Key::Up, _, Action::Press, _) => {
-                    state.selected_card.1 = state.selected_card.1.saturating_sub(1);
+                    let new = state.selected_card.1.saturating_sub(1);
+                    if new < state.rows.len() {
+                        let scroll_old = state.rows[state.selected_card.1].scroll.round() as isize;
+                        let scroll_new = state.rows[new].scroll.round() as isize;
+                        println!("{},{}", scroll_new, scroll_old);
+                        let mut new_scrl = state.selected_card.0 as isize;
+                        new_scrl += scroll_new - scroll_old;
+                        state.selected_card.0 = new_scrl as usize;
+                        state.selected_card.1 = new;
+                    }
                 }
                 WindowEvent::Key(Key::Down, _, Action::Press, _) => {
                     let new = state.selected_card.1.saturating_add(1);
                     if new < state.rows.len() {
+                        let scroll_old = state.rows[state.selected_card.1].scroll.round() as isize;
+                        let scroll_new = state.rows[new].scroll.round() as isize;
+                        println!("{},{}", scroll_new, scroll_old);
+                        let mut new_scrl = state.selected_card.0 as isize;
+                        new_scrl += scroll_new - scroll_old;
+                        state.selected_card.0 = new_scrl as usize;
                         state.selected_card.1 = new;
                     }
                 }
@@ -274,25 +289,25 @@ async fn main_loop(surface: GlfwSurface) {
                 row.scroll += (row.scroll_target - row.scroll) * (1. - (1. - delta_t) * 0.9);
                 for (x, card) in row.cards.iter_mut().enumerate() {
                     let is_selected = selected_card == (x, y);
-                    let target_size = if is_selected { 0.4 } else { 0.32 };
+                    let target_size = if is_selected { 0.42 } else { 0.32 };
                     let x_pos = x as f32 * 0.4 - 1. + 0.3;
                     let y_pos = 0.6 - y as f32 * 0.6;
-                    let x = x_pos - row.scroll;
-                    let y = y_pos - scroll;
+                    let x = x_pos - row.scroll * 0.4;
+                    let y = y_pos - scroll * 0.4;
                     if x > -1.5 && x < 1.5 && y > -1.5 && y < 1.5 {
                         panels.push((x, y, card.size, card.size));
                     }
                     card.size += (target_size - card.size) * (1. - (1. - delta_t) * 0.7);
                     if is_selected {
-                        if x_pos - row.scroll_target > 0.7 {
-                            row.scroll_target += 0.5;
-                        } else if x_pos - row.scroll_target < -0.7 {
-                            row.scroll_target -= 0.5;
+                        if x_pos - row.scroll_target * 0.4 > 0.7 {
+                            row.scroll_target += 1.;
+                        } else if x_pos - row.scroll_target * 0.4 < -0.7 {
+                            row.scroll_target -= 1.;
                         }
-                        if y_pos - scroll_target > 0.7 {
-                            scroll_target += 0.5;
-                        } else if y_pos - scroll_target < -0.7 {
-                            scroll_target -= 0.5;
+                        if y_pos - scroll_target * 0.4 > 0.7 {
+                            scroll_target += 1.;
+                        } else if y_pos - scroll_target * 0.4 < -0.7 {
+                            scroll_target -= 1.;
                         }
                     }
                 }
