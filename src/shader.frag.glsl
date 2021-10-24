@@ -1,10 +1,8 @@
-in vec3 v_color;
-
+in vec2 v_uv;
 out vec4 frag;
 
-uniform float t;
+uniform sampler2D tex;
 
 void main() {
-  frag = vec4(v_color, 1.);
-  frag = pow(frag, vec4(1./2.2));
+  frag = texture(tex, v_uv);
 }

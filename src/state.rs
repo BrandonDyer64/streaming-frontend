@@ -3,6 +3,8 @@ pub struct State {
     pub rows: Vec<Row>,
     pub selected_card: (usize, usize),
     pub show_modal: bool,
+    pub scroll: f32,
+    pub scroll_target: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -17,4 +19,5 @@ pub struct Row {
 pub struct Card {
     pub title: String,
     pub image: Option<bool>, // TODO
+    pub size: f32,
 }

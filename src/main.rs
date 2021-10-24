@@ -1,8 +1,11 @@
 use glfw::{Action, Context as _, Key, WindowEvent};
 use image::GenericImageView;
-use luminance::pixel::NormRGB8UI;
+use luminance::pipeline::TextureBinding;
+use luminance::pixel::{NormRGB8UI, NormUnsigned};
+use luminance::shader::Uniform;
 use luminance::tess::{TessView, View};
 use luminance::texture::{Dimensionable, GenMipmaps, Sampler};
+use luminance::UniformInterface;
 use luminance_front::texture::Texture;
 use luminance_front::{
     context::GraphicsContext as _, pipeline::PipelineState, render_state::RenderState, tess::Mode,
@@ -17,11 +20,14 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
+mod model;
 mod state;
 mod vertex;
 
 use state::*;
 use vertex::*;
+
+use crate::model::collection::{Data, Home, Set};
 
 const VERTICES: [Vertex; 4] = [
     Vertex::new(
@@ -41,6 +47,11 @@ const VERTICES: [Vertex; 4] = [
 
 const VS_STR: &str = include_str!("shader.vert.glsl");
 const FS_STR: &str = include_str!("shader.frag.glsl");
+
+#[derive(UniformInterface)]
+struct ShaderInterface {
+    tex: Uniform<TextureBinding<Dim2, NormUnsigned>>,
+}
 
 #[tokio::main]
 async fn main() {
@@ -86,96 +97,17 @@ async fn main_loop(surface: GlfwSurface) {
         .build()
         .unwrap();
     let mut program = ctxt
-        .new_shader_program::<VertexSemantics, (), ()>()
+        .new_shader_program::<VertexSemantics, (), ShaderInterface>()
         .from_strings(VS_STR, None, None, FS_STR)
         .unwrap()
         .ignore_warnings();
 
-    let image: Option<RGBTexture> = None;
-
     let mut state = State {
-        rows: vec![
-            Row {
-                scroll: 0.0,
-                scroll_target: 0.0,
-                title: String::from("Test row"),
-                cards: vec![
-                    Card {
-                        title: String::from("Michael Rodent"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Goof Moov"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Michael Rodent"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Goof Moov"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Michael Rodent"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Goof Moov"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Michael Rodent"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Goof Moov"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Michael Rodent"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Goof Moov"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Michael Rodent"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Goof Moov"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Michael Rodent"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Goof Moov"),
-                        image: None,
-                    },
-                ],
-            },
-            Row {
-                scroll: 0.0,
-                scroll_target: 0.0,
-                title: String::from("Test row 2"),
-                cards: vec![
-                    Card {
-                        title: String::from("Middle School Musical"),
-                        image: None,
-                    },
-                    Card {
-                        title: String::from("Sorcerers of Street St"),
-                        image: None,
-                    },
-                ],
-            },
-        ],
+        rows: Vec::new(),
         selected_card: (0, 0),
         show_modal: false,
+        scroll: 0.,
+        scroll_target: 0.,
     };
 
     let state = Arc::new(RwLock::new(state.clone()));
@@ -215,24 +147,47 @@ async fn main_loop(surface: GlfwSurface) {
         // let mut body = response.unwrap().into_body();
         // let text = body.read_to_string().await.unwrap();
         // println!("{}", text);
-        let x = body.json::<Value>().await.unwrap();
-        println!(
-            "{:#?}",
-            x.as_object()
-                .unwrap()
-                .get("data")
-                .unwrap()
-                .as_object()
-                .unwrap()
-                .get("StandardCollection")
-                .unwrap()
-                .as_object()
-                .unwrap()
-                .get("collectionId")
-                .unwrap()
-                .as_str()
-        );
-        let response = reqwest::get("https://httpbin.org/image/png").await.unwrap();
+        let x = body.json::<Home>().await.unwrap();
+        if let Data::StandardCollection {
+            collection_id,
+            containers,
+        } = x.data
+        {
+            println!("{:#?}", collection_id);
+            for container in containers {
+                match &container.set {
+                    Set::CuratedSet {
+                        set_id,
+                        text,
+                        items,
+                    } => {
+                        let mut state = async_state.write().await;
+                        state.rows.push(Row {
+                            scroll: 0.0,
+                            scroll_target: 0.0,
+                            title: text.get_name().unwrap(),
+                            cards: vec![
+                                Card {
+                                    title: String::from("Middle School Musical"),
+                                    image: None,
+                                    size: 0.0
+                                };
+                                items.len()
+                            ],
+                        });
+                        println!("{:#?} {:#?}", text.get_name(), items.len());
+                    }
+                    Set::SetRef {
+                        ref_id,
+                        ref_id_type,
+                        ref_type,
+                    } => {
+                        println!("refId: {}", ref_id);
+                    }
+                }
+            }
+        }
+        let response = reqwest::get("https://prod-ripcut-delivery.disney-plus.net/v1/variant/disney/CD3FC43E25A8722F8264FD65BB0F534FAAD5312DE01E5E949875E2AFB316022B/scale?format=jpeg&quality=90&scalingAlgorithm=lanczos3&width=500").await.unwrap();
         let cursor = Cursor::new(response.bytes().await.unwrap());
         let img = image::io::Reader::new(cursor)
             .with_guessed_format()
@@ -244,23 +199,9 @@ async fn main_loop(surface: GlfwSurface) {
             let mut loaded_image = loaded_image.write().await;
             loaded_image.0 = Some(img);
         }
-        let mut state = async_state.write().await;
-        state.rows.push(Row {
-            scroll: 0.0,
-            scroll_target: 0.0,
-            title: String::from("Test row 2"),
-            cards: vec![
-                Card {
-                    title: String::from("Middle School Musical"),
-                    image: None,
-                },
-                Card {
-                    title: String::from("Sorcerers of Street St"),
-                    image: None,
-                },
-            ],
-        });
     });
+
+    let mut tex = None;
 
     'app: loop {
         // handle events
@@ -272,7 +213,10 @@ async fn main_loop(surface: GlfwSurface) {
                     break 'app
                 }
                 WindowEvent::Key(Key::Right, _, Action::Press, _) => {
-                    state.selected_card.0 = state.selected_card.0.saturating_add(1);
+                    let new = state.selected_card.0.saturating_add(1);
+                    if new < state.rows[state.selected_card.1].cards.len() {
+                        state.selected_card.0 = new;
+                    }
                 }
                 WindowEvent::Key(Key::Left, _, Action::Press, _) => {
                     state.selected_card.0 = state.selected_card.0.saturating_sub(1);
@@ -281,7 +225,10 @@ async fn main_loop(surface: GlfwSurface) {
                     state.selected_card.1 = state.selected_card.1.saturating_sub(1);
                 }
                 WindowEvent::Key(Key::Down, _, Action::Press, _) => {
-                    state.selected_card.1 = state.selected_card.1.saturating_add(1);
+                    let new = state.selected_card.1.saturating_add(1);
+                    if new < state.rows.len() {
+                        state.selected_card.1 = new;
+                    }
                 }
                 _ => (),
             }
@@ -292,7 +239,7 @@ async fn main_loop(surface: GlfwSurface) {
             if let Some(img) = &loaded_image.0 {
                 let (width, height) = img.dimensions();
                 let texels = img.as_bytes();
-                let tex: RGBTexture = Texture::new_raw(
+                let new_tex: RGBTexture = Texture::new_raw(
                     &mut ctxt,
                     [width, height],
                     0,
@@ -304,6 +251,7 @@ async fn main_loop(surface: GlfwSurface) {
                 .ok()
                 .expect("load displacement map");
                 loaded_image.0 = None;
+                tex = Some(new_tex);
                 println!("did the image thing");
             }
         }
@@ -320,22 +268,37 @@ async fn main_loop(surface: GlfwSurface) {
         {
             let mut state = state.write().await;
             let selected_card = state.selected_card;
+            let scroll = state.scroll;
+            let mut scroll_target = state.scroll_target;
             for (y, row) in state.rows.iter_mut().enumerate() {
                 row.scroll += (row.scroll_target - row.scroll) * (1. - (1. - delta_t) * 0.9);
-                for (x, _card) in row.cards.iter().enumerate() {
+                for (x, card) in row.cards.iter_mut().enumerate() {
                     let is_selected = selected_card == (x, y);
-                    let size = if is_selected { 0.4 } else { 0.32 };
-                    let x_pos = x as f32 * 0.4 - 1. + 0.2;
-                    panels.push((x_pos - row.scroll, 0.8 - y as f32 * 0.6, size, size));
+                    let target_size = if is_selected { 0.4 } else { 0.32 };
+                    let x_pos = x as f32 * 0.4 - 1. + 0.3;
+                    let y_pos = 0.6 - y as f32 * 0.6;
+                    let x = x_pos - row.scroll;
+                    let y = y_pos - scroll;
+                    if x > -1.5 && x < 1.5 && y > -1.5 && y < 1.5 {
+                        panels.push((x, y, card.size, card.size));
+                    }
+                    card.size += (target_size - card.size) * (1. - (1. - delta_t) * 0.7);
                     if is_selected {
-                        if x_pos - row.scroll_target > 0.8 {
+                        if x_pos - row.scroll_target > 0.7 {
                             row.scroll_target += 0.5;
-                        } else if x_pos - row.scroll_target < -0.8 {
+                        } else if x_pos - row.scroll_target < -0.7 {
                             row.scroll_target -= 0.5;
+                        }
+                        if y_pos - scroll_target > 0.7 {
+                            scroll_target += 0.5;
+                        } else if y_pos - scroll_target < -0.7 {
+                            scroll_target -= 0.5;
                         }
                     }
                 }
             }
+            state.scroll_target = scroll_target;
+            state.scroll += (state.scroll_target - state.scroll) * (1. - (1. - delta_t) * 0.9);
         }
 
         // make instances go boop boop by changing their weight dynamically
@@ -355,7 +318,10 @@ async fn main_loop(surface: GlfwSurface) {
             .pipeline(
                 &back_buffer,
                 &PipelineState::default().set_clear_color(color),
-                |_pipeline, mut shd_gate| {
+                |pipeline, mut shd_gate| {
+                    if let Some(tex) = &mut tex {
+                        let bound_tex = pipeline.bind_texture(tex);
+                    }
                     shd_gate.shade(&mut program, |mut iface, _, mut rdr_gate| {
                         if let Ok(ref time_u) = iface.query().unwrap().ask::<f32, &str>("t") {
                             iface.set(time_u, t);
