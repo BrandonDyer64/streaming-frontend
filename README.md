@@ -6,10 +6,12 @@ Consumes an API and displays media data.
 
 **NOTES:**
 
-- This application has only been tested on **macOS**
+- This application has only been tested on **macOS**.
+- Please keep in mind that it may take some time for tiles to load.
 - If you see a tile that looks like _Mickey Mouse Clubhouse_ in French, it means the data either hasn't loaded yet or failed to load.
   - This seems to happen on the second tile on the home screen, which sohuld be _The Mandalorian_. It looks like the image it's getting back from the API is a 404.
-- The app does dynamically load rows on demand as the user scrolls down the page
+- The app dynamically loads rows on demand as the user scrolls down the page.
+- All transitions are animated.
 
 ### Cargo
 
