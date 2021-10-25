@@ -51,6 +51,8 @@ pub struct Card {
     pub title: String,
     pub image: CardImage,
     pub size: f32,
+    pub ratings: Vec<String>,
+    pub releases: Vec<String>,
 }
 
 impl From<&Item> for Option<Card> {
@@ -59,6 +61,21 @@ impl From<&Item> for Option<Card> {
             title: item.text.get_name()?,
             image: CardImage::URI(item.image.tile.as_ref()?.image.get_uri()?),
             size: 0.,
+            ratings: item
+                .ratings
+                .as_ref()
+                .map(|ratings| ratings.iter().filter_map(|r| r.value.clone()).collect())
+                .unwrap_or(vec![]),
+            releases: item
+                .releases
+                .as_ref()
+                .map(|releases| {
+                    releases
+                        .iter()
+                        .filter_map(|r| r.release_date.clone())
+                        .collect()
+                })
+                .unwrap_or(vec![]),
         })
     }
 }

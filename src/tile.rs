@@ -99,8 +99,20 @@ impl TileRenderer {
                     glyph_brush.queue(
                         Section::default()
                             .add_text(Text::new(&card.title).with_scale(50.))
-                            .with_screen_position((WIDTH as f32, HEIGHT as f32 * 0.66)),
+                            .with_screen_position((WIDTH as f32, HEIGHT as f32 - 50.)),
                     );
+                    for (i, r) in card.ratings.iter().zip(card.releases.iter()).enumerate() {
+                        glyph_brush.queue(
+                            Section::default()
+                                .add_text(
+                                    Text::new(&format!("{}  |  {}", r.0, r.1)).with_scale(35.),
+                                )
+                                .with_screen_position((
+                                    WIDTH as f32,
+                                    HEIGHT as f32 + 50. * i as f32,
+                                )),
+                        );
+                    }
                     return;
                 }
             }

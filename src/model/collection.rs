@@ -80,6 +80,8 @@ pub struct Item {
     pub content_id: Option<String>,
     pub text: ItemText,
     pub image: Image,
+    pub ratings: Option<Vec<Rating>>,
+    pub releases: Option<Vec<Release>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,6 +123,18 @@ impl ItemText {
     pub fn get_name(&self) -> Option<String> {
         Some(self.title.full.get_default().content.clone())
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Rating {
+    pub system: Option<String>,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Release {
+    #[serde(rename = "releaseDate")]
+    pub release_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

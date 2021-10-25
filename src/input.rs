@@ -6,8 +6,17 @@ pub async fn handle_event(event: WindowEvent, state: AsyncState) -> bool {
     let mut state = state.write().await;
     match event {
         WindowEvent::Close | WindowEvent::Key(Key::Escape, _, Action::Release, _) => return false,
-        WindowEvent::Key(Key::Enter, _, Action::Press, _) => state.show_modal = true,
         WindowEvent::Key(Key::Backspace, _, Action::Press, _) => state.show_modal = false,
+        _ => {}
+    }
+
+    // Don't handle movement input when modal is showing
+    if state.show_modal {
+        return true;
+    }
+
+    match event {
+        WindowEvent::Key(Key::Enter, _, Action::Press, _) => state.show_modal = true,
         WindowEvent::Key(Key::Right, _, Action::Press | Action::Repeat, _) => {
             let new = state.selected_card.0.saturating_add(1);
             if new < state.rows[state.selected_card.1].cards.len() {
