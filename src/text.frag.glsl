@@ -7,7 +7,7 @@ out vec4 out_color;
 
 void main() {
     float alpha = texture(tex, f_tex_pos).r;
-    if (alpha <= 0.2) {
+    if (alpha <= 0.0) {
         discard;
     }
     out_color = f_color * vec4(1.0, 1.0, 1.0, alpha);

@@ -1,13 +1,10 @@
-use glfw::{Action, Context as _, Key, WindowEvent};
-use glyph_brush::{
-    ab_glyph::{point, FontArc, Rect},
-    BrushAction, BrushError, GlyphBrush, GlyphBrushBuilder, Section, Text,
-};
+use glfw::Context as _;
+use glyph_brush::{ab_glyph::FontArc, GlyphBrush, GlyphBrushBuilder, Section, Text};
 use image::GenericImageView;
 use luminance::{
     context::GraphicsContext,
     pipeline::{PipelineState, TextureBinding},
-    pixel::{NormR8UI, NormUnsigned},
+    pixel::NormUnsigned,
     render_state::RenderState,
     shader::Uniform,
     tess::Mode,
@@ -25,31 +22,26 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
+mod api;
+mod input;
 mod model;
 mod state;
+mod text;
 mod vertex;
 
 use state::*;
 use vertex::*;
 
-use crate::model::collection::{Data, Home, RefSet};
+use crate::text::TextRenderer;
 
 const VS_STR: &str = include_str!("shader.vert.glsl");
 const FS_STR: &str = include_str!("shader.frag.glsl");
-
-const VS_FONT_STR: &str = include_str!("text.vert.glsl");
-const FS_FONT_STR: &str = include_str!("text.frag.glsl");
 
 #[derive(UniformInterface)]
 struct ShaderInterface {
     position: Uniform<[f32; 2]>,
     weight: Uniform<f32>,
     tex: Uniform<TextureBinding<Dim2, NormUnsigned>>,
-}
-
-#[derive(UniformInterface)]
-pub struct FontShaderInterface {
-    pub tex: Uniform<TextureBinding<Dim2, NormUnsigned>>,
 }
 
 pub const WIDTH: u32 = 960;
@@ -98,11 +90,7 @@ async fn main_loop(surface: GlfwSurface) {
         .from_strings(VS_STR, None, None, FS_STR)
         .unwrap()
         .ignore_warnings();
-    let mut font_program = ctxt
-        .new_shader_program::<VertexSemantics, (), FontShaderInterface>()
-        .from_strings(VS_FONT_STR, None, None, FS_FONT_STR)
-        .expect("Program creation")
-        .ignore_warnings();
+
     let state = Arc::new(RwLock::new(State {
         rows: Vec::new(),
         selected_card: (0, 0),
@@ -112,25 +100,9 @@ async fn main_loop(surface: GlfwSurface) {
     }));
 
     let font = FontArc::try_from_slice(include_bytes!("OpenSans-Regular.ttf")).expect("font");
-    let mut glyph_brush: GlyphBrush<Instance> = GlyphBrushBuilder::using_font(font).build();
+    let mut glyph_brush: GlyphBrush<TextInstance> = GlyphBrushBuilder::using_font(font).build();
 
-    let mut font_tess = None;
-    let mut font_tex: Texture<Dim2, NormR8UI> = Texture::new(
-        &mut ctxt,
-        [
-            glyph_brush.texture_dimensions().0,
-            glyph_brush.texture_dimensions().1,
-        ],
-        0,
-        Sampler::default(),
-        GenMipmaps::No,
-        &vec![
-            0u8;
-            glyph_brush.texture_dimensions().0 as usize
-                * glyph_brush.texture_dimensions().1 as usize
-        ],
-    )
-    .expect("luminance texture creation");
+    let mut text_renderer = TextRenderer::new(&mut ctxt, &mut glyph_brush);
 
     let tex_uid = AtomicU32::new(1u32);
 
@@ -139,118 +111,14 @@ async fn main_loop(surface: GlfwSurface) {
     let loaded_images: Arc<RwLock<Vec<(u32, image::DynamicImage)>>> =
         Arc::new(RwLock::new(Vec::new()));
 
-    let async_state = Arc::clone(&state);
-    let async_images = Arc::clone(&loaded_images);
-    tokio::spawn(async move {
-        let loaded_images = async_images;
-        let body = reqwest::get("https://cd-static.bamgrid.com/dp-117731241344/home.json")
-            .await
-            .unwrap();
-        let x = body.json::<Home>().await.unwrap();
-        #[allow(irrefutable_let_patterns)]
-        if let Data::StandardCollection {
-            collection_id: _,
-            containers,
-        } = x.data
-        {
-            for container in &containers {
-                let mut _state = async_state.clone();
-                let row: Option<Row> = match &container.set {
-                    model::collection::Set::CuratedSet {
-                        set_id: _,
-                        text: _,
-                        items: _,
-                    } => (&container.set).into(),
-                    model::collection::Set::SetRef {
-                        ref_id,
-                        ref_id_type: _,
-                        ref_type: _,
-                    } => {
-                        let ref_id = ref_id.clone();
-                        let async_state = Arc::clone(&_state);
-                        tokio::spawn(async move {
-                            let state = async_state;
-                            let body = reqwest::get(format!(
-                                "https://cd-static.bamgrid.com/dp-117731241344/sets/{}.json",
-                                ref_id
-                            ))
-                            .await
-                            .unwrap();
-                            let x = body
-                                .json::<RefSet>()
-                                .await
-                                .map_err(|e| println!("{} {}", ref_id, e))
-                                .unwrap();
-                            let row: Option<Row> = (&x.data.set).into();
-                            if let Some(row) = row {
-                                let mut state = state.write().await;
-                                state.rows.push(row);
-                            }
-                        });
-                        None
-                    }
-                };
-                if let Some(row) = row {
-                    let mut state = async_state.write().await;
-                    state.rows.push(row);
-                }
-            }
-        }
-        let response = reqwest::get("https://prod-ripcut-delivery.disney-plus.net/v1/variant/disney/CD3FC43E25A8722F8264FD65BB0F534FAAD5312DE01E5E949875E2AFB316022B/scale?format=jpeg&quality=90&scalingAlgorithm=lanczos3&width=500").await.unwrap();
-        let cursor = Cursor::new(response.bytes().await.unwrap());
-        let img = image::io::Reader::new(cursor)
-            .with_guessed_format()
-            .unwrap()
-            .decode()
-            .unwrap();
-
-        {
-            let mut loaded_images = loaded_images.write().await;
-            loaded_images.push((0u32, img));
-        }
-    });
+    tokio::spawn(api::load_home(state.clone(), loaded_images.clone()));
 
     'app: loop {
         // handle events
         ctxt.window.glfw.poll_events();
         for (_, event) in glfw::flush_messages(&events) {
-            let mut state = state.write().await;
-            match event {
-                WindowEvent::Close | WindowEvent::Key(Key::Escape, _, Action::Release, _) => {
-                    break 'app
-                }
-                WindowEvent::Key(Key::Right, _, Action::Press | Action::Repeat, _) => {
-                    let new = state.selected_card.0.saturating_add(1);
-                    if new < state.rows[state.selected_card.1].cards.len() {
-                        state.selected_card.0 = new;
-                    }
-                }
-                WindowEvent::Key(Key::Left, _, Action::Press | Action::Repeat, _) => {
-                    state.selected_card.0 = state.selected_card.0.saturating_sub(1);
-                }
-                WindowEvent::Key(Key::Up, _, Action::Press, _) => {
-                    let new = state.selected_card.1.saturating_sub(1);
-                    if new < state.rows.len() {
-                        let scroll_old = state.rows[state.selected_card.1].scroll.round() as isize;
-                        let scroll_new = state.rows[new].scroll.round() as isize;
-                        let mut new_scrl = state.selected_card.0 as isize;
-                        new_scrl += scroll_new - scroll_old;
-                        state.selected_card.0 = new_scrl as usize;
-                        state.selected_card.1 = new;
-                    }
-                }
-                WindowEvent::Key(Key::Down, _, Action::Press, _) => {
-                    let new = state.selected_card.1.saturating_add(1);
-                    if new < state.rows.len() {
-                        let scroll_old = state.rows[state.selected_card.1].scroll.round() as isize;
-                        let scroll_new = state.rows[new].scroll.round() as isize;
-                        let mut new_scrl = state.selected_card.0 as isize;
-                        new_scrl += scroll_new - scroll_old;
-                        state.selected_card.0 = new_scrl as usize;
-                        state.selected_card.1 = new;
-                    }
-                }
-                _ => (),
+            if !input::handle_event(event, state.clone()).await {
+                break 'app;
             }
         }
 
@@ -374,40 +242,7 @@ async fn main_loop(surface: GlfwSurface) {
             state.scroll += (state.scroll_target - state.scroll) * (1. - (1. - delta_t) * 0.9);
         }
 
-        let action = glyph_brush.process_queued(
-            |rect, tex_data| {
-                // Update part of gpu texture with new glyph alpha values
-                font_tex
-                    .upload_part_raw(
-                        GenMipmaps::No,
-                        [rect.min[0] as u32, rect.min[1] as u32],
-                        [rect.width() as u32, rect.height() as u32],
-                        tex_data,
-                    )
-                    .expect("Cannot upload part of texture");
-            },
-            |vertex_data| to_vertex(WIDTH as f32 * 2., HEIGHT as f32 * 2., vertex_data),
-        );
-
-        if let Err(e) = action {
-            let BrushError::TextureTooSmall { suggested } = e;
-            glyph_brush.resize_texture(suggested.0, suggested.1);
-            return;
-        }
-        let action = action.unwrap();
-        match action {
-            BrushAction::Draw(v) => {
-                let tess = ctxt
-                    .new_tess()
-                    .set_render_vertex_nb(4)
-                    .set_instances(v)
-                    .set_mode(Mode::TriangleStrip)
-                    .build()
-                    .unwrap();
-                font_tess = Some(tess);
-            }
-            BrushAction::ReDraw => (),
-        };
+        text_renderer.process_queued(&mut ctxt, &mut glyph_brush);
 
         let render = ctxt
             .new_pipeline_gate()
@@ -437,16 +272,7 @@ async fn main_loop(surface: GlfwSurface) {
                         }
                         Ok(())
                     })?;
-                    if let Some(tess) = font_tess.as_ref() {
-                        shd_gate.shade(&mut font_program, |mut iface, uni, mut rdr_gate| {
-                            let bound_tex = pipeline.bind_texture(&mut font_tex)?;
-                            iface.set(&uni.tex, bound_tex.binding());
-                            //iface.set(&uni.transform, proj);
-                            rdr_gate.render(&RenderState::default(), |mut tess_gate| {
-                                tess_gate.render(tess)
-                            })
-                        })?;
-                    }
+                    text_renderer.render(&pipeline, &mut shd_gate)?;
                     Ok(())
                 },
             )
@@ -460,65 +286,4 @@ async fn main_loop(surface: GlfwSurface) {
         }
     }
     println!("Done.");
-}
-
-#[inline]
-fn to_vertex(
-    width: f32,
-    height: f32,
-    glyph_brush::GlyphVertex {
-        mut tex_coords,
-        pixel_coords,
-        bounds,
-        ..
-    }: glyph_brush::GlyphVertex,
-) -> Instance {
-    let gl_bounds = bounds;
-
-    let mut gl_rect = Rect {
-        min: point(pixel_coords.min.x as f32, pixel_coords.min.y as f32),
-        max: point(pixel_coords.max.x as f32, pixel_coords.max.y as f32),
-    };
-    // println!("GL_RECT = {:?}", gl_rect);
-
-    // handle overlapping bounds, modify uv_rect to preserve texture aspect
-    if gl_rect.max.x > gl_bounds.max.x {
-        let old_width = gl_rect.width();
-        gl_rect.max.x = gl_bounds.max.x;
-        tex_coords.max.x = tex_coords.min.x + tex_coords.width() * gl_rect.width() / old_width;
-    }
-    if gl_rect.min.x < gl_bounds.min.x {
-        let old_width = gl_rect.width();
-        gl_rect.min.x = gl_bounds.min.x;
-        tex_coords.min.x = tex_coords.max.x - tex_coords.width() * gl_rect.width() / old_width;
-    }
-    if gl_rect.max.y > gl_bounds.max.y {
-        let old_height = gl_rect.height();
-        gl_rect.max.y = gl_bounds.max.y;
-        tex_coords.max.y = tex_coords.min.y + tex_coords.height() * gl_rect.height() / old_height;
-    }
-    if gl_rect.min.y < gl_bounds.min.y {
-        let old_height = gl_rect.height();
-        gl_rect.min.y = gl_bounds.min.y;
-        tex_coords.min.y = tex_coords.max.y - tex_coords.height() * gl_rect.height() / old_height;
-    }
-
-    let to_view_space = |x: f32, y: f32| -> [f32; 2] {
-        let pos_x = (x / width) * 2.0 - 1.0;
-        let pos_y = (1.0 - y / height) * 2.0 - 1.0;
-        [pos_x, pos_y]
-    };
-
-    let left_top = to_view_space(gl_rect.min.x, gl_rect.max.y);
-
-    let v = Instance {
-        left_top: VertexLeftTop::new([left_top[0], left_top[1], 0.]),
-        right_bottom: VertexRightBottom::new(to_view_space(gl_rect.max.x, gl_rect.min.y)),
-        tex_left_top: TextureLeftTop::new([tex_coords.min.x, tex_coords.max.y]),
-        tex_right_bottom: TextureRightBottom::new([tex_coords.max.x, tex_coords.min.y]),
-        color: TextColor::new([1., 1., 1., 1.]),
-    };
-
-    // println!("vertex -> {:?}", v);
-    v
 }

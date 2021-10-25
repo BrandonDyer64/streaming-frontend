@@ -14,7 +14,6 @@ luminance-derive = "0.7.0"
 luminance-front = "0.4.0"
 luminance-gl = "0.17.0"
 luminance-glfw = "0.16.0"
-luminance-glyph = "0.2.0"
 luminance-windowing = "0.10"
 reqwest = {version = "0.11.6", features = ["json"]}
 serde = {version = "1.0.130", features = ["derive"]}

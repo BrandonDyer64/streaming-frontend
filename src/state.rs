@@ -1,5 +1,7 @@
+use tokio::sync::RwLock;
+
 use crate::model::collection::{Item, Set};
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone, Debug)]
 pub struct State {
@@ -9,6 +11,8 @@ pub struct State {
     pub scroll: f32,
     pub scroll_target: f32,
 }
+
+pub type AsyncState = Arc<RwLock<State>>;
 
 #[derive(Clone, Debug)]
 pub struct Row {
