@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 
 pub async fn load_home(
     state: Arc<RwLock<state::State>>,
-    loaded_images: Arc<RwLock<Vec<(u32, image::DynamicImage)>>>,
+    queued_images: Arc<RwLock<Vec<(u32, image::DynamicImage)>>>,
 ) {
     let body = reqwest::get("https://cd-static.bamgrid.com/dp-117731241344/home.json")
         .await
@@ -17,7 +17,6 @@ pub async fn load_home(
     } = x.data
     {
         for container in &containers {
-            let mut _state = state.clone();
             let row: Option<state::Row> = match &container.set {
                 collection::Set::CuratedSet {
                     set_id: _,
@@ -30,26 +29,8 @@ pub async fn load_home(
                     ref_type: _,
                 } => {
                     let ref_id = ref_id.clone();
-                    let async_state = Arc::clone(&_state);
-                    tokio::spawn(async move {
-                        let state = async_state;
-                        let body = reqwest::get(format!(
-                            "https://cd-static.bamgrid.com/dp-117731241344/sets/{}.json",
-                            ref_id
-                        ))
-                        .await
-                        .unwrap();
-                        let x = body
-                            .json::<collection::RefSet>()
-                            .await
-                            .map_err(|e| println!("{} {}", ref_id, e))
-                            .unwrap();
-                        let row: Option<state::Row> = (&x.data.set).into();
-                        if let Some(row) = row {
-                            let mut state = state.write().await;
-                            state.rows.push(row);
-                        }
-                    });
+                    let mut state = state.write().await;
+                    state.queued_rows.push(ref_id);
                     None
                 }
             };
@@ -68,7 +49,63 @@ pub async fn load_home(
         .unwrap();
 
     {
-        let mut loaded_images = loaded_images.write().await;
-        loaded_images.push((0u32, img));
+        let mut queued_images = queued_images.write().await;
+        queued_images.push((0u32, img));
     }
+}
+
+pub async fn load_card_image(
+    uri: String,
+    state: state::AsyncState,
+    queued_images: Arc<RwLock<Vec<(u32, image::DynamicImage)>>>,
+    x: usize,
+    y: usize,
+    uid: u32,
+) {
+    let response = reqwest::get(uri).await.unwrap();
+    let cursor = Cursor::new(response.bytes().await.unwrap());
+    let img = image::io::Reader::new(cursor)
+        .with_guessed_format()
+        .unwrap()
+        .decode()
+        .unwrap();
+
+    {
+        let mut queued_images = queued_images.write().await;
+        queued_images.push((uid, img));
+    }
+    {
+        let mut state = state.write().await;
+        state
+            .rows
+            .get_mut(y as usize)
+            .and_then(|row| row.cards.get_mut(x as usize))
+            .map(|card| card.image = state::CardImage::Texture(uid));
+    }
+}
+
+pub async fn load_next_row(state: state::AsyncState) -> Option<()> {
+    println!("Loading next row");
+    let ref_id = {
+        let mut state = state.write().await;
+        state.queued_rows.pop()
+    }?;
+    let body = reqwest::get(format!(
+        "https://cd-static.bamgrid.com/dp-117731241344/sets/{}.json",
+        ref_id
+    ))
+    .await
+    .unwrap();
+    let x = body
+        .json::<collection::RefSet>()
+        .await
+        .map_err(|e| println!("{} {}", ref_id, e))
+        .unwrap();
+    let row: Option<state::Row> = (&x.data.set).into();
+    if let Some(row) = row {
+        let mut state = state.write().await;
+        state.rows.push(row);
+    }
+    println!("Done loading row");
+    Some(())
 }

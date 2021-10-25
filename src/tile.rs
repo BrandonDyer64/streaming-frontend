@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    io::Cursor,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc,
@@ -22,7 +21,7 @@ use luminance_front::{pipeline::Pipeline, shader::Program, shading_gate::Shading
 use luminance_glfw::GL33Context;
 use tokio::sync::RwLock;
 
-use crate::{state, vertex::*, HEIGHT, WIDTH};
+use crate::{api, state, vertex::*, HEIGHT, WIDTH};
 
 const VS_STR: &str = include_str!("shader.vert.glsl");
 const FS_STR: &str = include_str!("shader.frag.glsl");
@@ -73,7 +72,7 @@ impl TileRenderer {
         state: state::AsyncState,
         glyph_brush: &mut GlyphBrush<TextInstance>,
         tex_uid: &AtomicU32,
-        loaded_images: Arc<RwLock<Vec<(u32, image::DynamicImage)>>>,
+        queued_images: Arc<RwLock<Vec<(u32, image::DynamicImage)>>>,
     ) {
         self.tiles.clear();
         let state_ = Arc::clone(&state);
@@ -82,6 +81,24 @@ impl TileRenderer {
         let scroll = state.scroll;
         let mut scroll_target = state.scroll_target;
 
+        // Dynamically load next row
+        // TODO: Put this in the user input section instead of the tile renderer
+        if selected_card.1 >= state.rows.len().saturating_sub(2)
+            && !state.is_loading_row
+            && state.queued_rows.len() > 0
+        {
+            state.is_loading_row = true;
+            let state_ = state_.clone();
+            tokio::spawn(async move {
+                api::load_next_row(state_.clone()).await;
+                let mut state = state_.write().await;
+                state.is_loading_row = false;
+            });
+        }
+
+        // Modal
+        // Show the panel on the left side of the screen and some info on the right
+        // TODO: Make a modal function
         if state.show_modal {
             let card = state
                 .rows
@@ -118,12 +135,15 @@ impl TileRenderer {
             }
         }
 
+        let h_spacing = 0.4;
+        let v_spacing = 0.6;
+        let safe_area = 0.71;
+
         for (y, row) in state.rows.iter_mut().enumerate() {
-            row.scroll += (row.scroll_target - row.scroll) * (1. - (1. - delta_t) * 0.9);
-            row.text_height +=
-                (row.text_height_target - row.text_height) * (1. - (1. - delta_t) * 0.7);
-            let y_pos = 0.6 - y as f32 * 0.6;
-            let y_ = y_pos - scroll * 0.6;
+            row.scroll = lerp(row.scroll, row.scroll_target, 0.9, delta_t);
+            row.text_height = lerp(row.text_height, row.text_height_target, 0.7, delta_t);
+            let y_pos_pre = v_spacing - y as f32 * v_spacing;
+            let y_pos = y_pos_pre - scroll * v_spacing;
             if selected_card.1 == y && (selected_card.0 as f32 - row.scroll).round() as u32 == 0 {
                 row.text_height_target = 0.3;
             } else {
@@ -134,46 +154,28 @@ impl TileRenderer {
                     .add_text(Text::new(&row.title).with_scale(36.))
                     .with_screen_position((
                         135.,
-                        HEIGHT as f32 - (y_ + row.text_height) * HEIGHT as f32,
+                        HEIGHT as f32 - (y_pos + row.text_height) * HEIGHT as f32,
                     )),
             );
             for (x, card) in row.cards.iter_mut().enumerate() {
                 let is_selected = selected_card == (x, y);
                 let target_size = if is_selected { 0.42 } else { 0.32 };
-                let x_pos = x as f32 * 0.4 - 1. + 0.3;
-                let x_ = x_pos - row.scroll * 0.4;
-                if x_ > -1.5 && x_ < 1.5 && y_ > -1.5 && y_ < 1.5 {
+                let x_pos_pre = x as f32 * h_spacing - 1. + 0.3;
+                let x_pos = x_pos_pre - row.scroll * h_spacing;
+                if x_pos > -1.5 && x_pos < 1.5 && y_pos > -1.5 && y_pos < 1.5 {
                     let img_id: u32 = match &card.image {
                         state::CardImage::URI(uri) => {
                             let uri = uri.clone();
                             card.image = state::CardImage::Loading(1);
                             let uid = tex_uid.fetch_add(1, Ordering::SeqCst);
-                            let async_state = Arc::clone(&state_);
-                            let async_images = Arc::clone(&loaded_images);
-                            tokio::spawn(async move {
-                                let loaded_images = async_images;
-                                let state = async_state;
-                                let response = reqwest::get(uri).await.unwrap();
-                                let cursor = Cursor::new(response.bytes().await.unwrap());
-                                let img = image::io::Reader::new(cursor)
-                                    .with_guessed_format()
-                                    .unwrap()
-                                    .decode()
-                                    .unwrap();
-
-                                {
-                                    let mut loaded_images = loaded_images.write().await;
-                                    loaded_images.push((uid, img));
-                                }
-                                {
-                                    let mut state = state.write().await;
-                                    state
-                                        .rows
-                                        .get_mut(y as usize)
-                                        .and_then(|row| row.cards.get_mut(x as usize))
-                                        .map(|card| card.image = state::CardImage::Texture(uid));
-                                }
-                            });
+                            tokio::spawn(api::load_card_image(
+                                uri,
+                                state_.clone(),
+                                queued_images.clone(),
+                                x,
+                                y,
+                                uid,
+                            ));
                             0
                         }
                         state::CardImage::Texture(x) => *x,
@@ -181,28 +183,30 @@ impl TileRenderer {
                     };
                     self.tiles.push(Tile {
                         tex_id: img_id,
-                        x: x_,
-                        y: y_,
+                        x: x_pos,
+                        y: y_pos,
                         size: card.size,
                     });
                 }
-                card.size += (target_size - card.size) * (1. - (1. - delta_t) * 0.7);
+                card.size = lerp(card.size, target_size, 0.7, delta_t);
+
+                // If the selected card is out of the safe area, scroll the screen or row to bring it back in
                 if is_selected {
-                    if x_pos - row.scroll_target * 0.4 > 0.7 {
+                    if x_pos_pre - row.scroll_target * h_spacing > safe_area {
                         row.scroll_target += 1.;
-                    } else if x_pos - row.scroll_target * 0.4 < -0.71 {
+                    } else if x_pos_pre - row.scroll_target * h_spacing < -safe_area {
                         row.scroll_target -= 1.;
                     }
-                    if y_pos - scroll_target * 0.6 > 0.7 {
+                    if y_pos_pre - scroll_target * v_spacing > safe_area {
                         scroll_target += 1.;
-                    } else if y_pos - scroll_target * 0.6 < -0.7 {
+                    } else if y_pos_pre - scroll_target * v_spacing < -safe_area {
                         scroll_target -= 1.;
                     }
                 }
             }
         }
         state.scroll_target = scroll_target;
-        state.scroll += (state.scroll_target - state.scroll) * (1. - (1. - delta_t) * 0.9);
+        state.scroll = lerp(state.scroll, state.scroll_target, 0.9, delta_t);
     }
 
     pub fn render(
@@ -233,4 +237,9 @@ impl TileRenderer {
             Ok(())
         })
     }
+}
+
+/// Super basic linear interpolation with delta time
+fn lerp(origin: f32, target: f32, speed: f32, delta_t: f32) -> f32 {
+    origin + (target - origin) * (1. - (1. - delta_t) * speed)
 }

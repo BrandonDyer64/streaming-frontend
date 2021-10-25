@@ -6,10 +6,26 @@ use std::{fmt::Debug, sync::Arc};
 #[derive(Clone, Debug)]
 pub struct State {
     pub rows: Vec<Row>,
+    pub queued_rows: Vec<String>,
+    pub is_loading_row: bool,
     pub selected_card: (usize, usize),
     pub show_modal: bool,
     pub scroll: f32,
     pub scroll_target: f32,
+}
+
+impl State {
+    pub fn new() -> Self {
+        State {
+            rows: Vec::new(),
+            queued_rows: Vec::new(),
+            is_loading_row: false,
+            selected_card: (0, 0),
+            show_modal: false,
+            scroll: 0.,
+            scroll_target: 0.,
+        }
+    }
 }
 
 pub type AsyncState = Arc<RwLock<State>>;

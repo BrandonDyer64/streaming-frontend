@@ -60,13 +60,7 @@ async fn main_loop(surface: GlfwSurface) {
     let events = surface.events_rx;
     let back_buffer = ctxt.back_buffer().expect("back buffer");
 
-    let state = Arc::new(RwLock::new(State {
-        rows: Vec::new(),
-        selected_card: (0, 0),
-        show_modal: false,
-        scroll: 0.,
-        scroll_target: 0.,
-    }));
+    let state = Arc::new(RwLock::new(State::new()));
 
     let font = FontArc::try_from_slice(include_bytes!("OpenSans-Regular.ttf")).expect("font");
     let mut glyph_brush: GlyphBrush<TextInstance> = GlyphBrushBuilder::using_font(font).build();
