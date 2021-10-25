@@ -15,7 +15,13 @@ Consumes an API and displays media data.
 
 ### Cargo
 
-This should be all you need to build and run the application. It is entirely possible that there are system dependencies, but I am not aware of any.
+At least these packages will need to be installed to get it to compile:
+
+```
+libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+```
+
+This should be all you need to build and run the application.
 
 ```bash
 $ cargo run
@@ -23,8 +29,8 @@ $ cargo run
 
 ### Binary
 
-- Mac / Linux: `./streaming-service`
-- Windows: There is currently no binary for windows. Please use [cargo](#Cargo)
+- Mac: `./streaming-service`
+- Linux / Windows: There is currently no binary for these platforms. Please use [cargo](#Cargo)
 
 ## Screenshots
 
