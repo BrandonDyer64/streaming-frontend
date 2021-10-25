@@ -294,7 +294,8 @@ async fn main_loop(surface: GlfwSurface) {
                     (row.text_height_target - row.text_height) * (1. - (1. - delta_t) * 0.7);
                 let y_pos = 0.6 - y as f32 * 0.6;
                 let y_ = y_pos - scroll * 0.4;
-                if selected_card.1 == y {
+                if selected_card.1 == y && (selected_card.0 as f32 - row.scroll).round() as u32 == 0
+                {
                     row.text_height_target = 0.3;
                 } else {
                     row.text_height_target = 0.25;
@@ -358,7 +359,7 @@ async fn main_loop(surface: GlfwSurface) {
                     if is_selected {
                         if x_pos - row.scroll_target * 0.4 > 0.7 {
                             row.scroll_target += 1.;
-                        } else if x_pos - row.scroll_target * 0.4 < -0.7 {
+                        } else if x_pos - row.scroll_target * 0.4 < -0.71 {
                             row.scroll_target -= 1.;
                         }
                         if y_pos - scroll_target * 0.4 > 0.7 {
@@ -420,19 +421,19 @@ async fn main_loop(surface: GlfwSurface) {
                                 .get_mut(&panel.0)
                                 .map(|tex| pipeline.bind_texture(tex))
                                 .transpose()?;
-                            if let Ok(ref time_u) = iface.query().unwrap().ask::<f32, &str>("t") {
-                                iface.set(time_u, t);
-                            }
                             if let Some(bound_tex) = bound_tex {
+                                if let Ok(ref time_u) = iface.query().unwrap().ask::<f32, &str>("t")
+                                {
+                                    iface.set(time_u, t);
+                                }
                                 iface.set(&uni.tex, bound_tex.binding());
+                                iface.set(&uni.weight, panel.3 * 0.5);
+                                iface.set(&uni.position, [panel.1, panel.2]);
+                                rdr_gate.render(&RenderState::default(), |mut tess_gate| {
+                                    // let view = TessView::inst_whole(&triangle, panels.len());
+                                    tess_gate.render(&tess)
+                                })?;
                             }
-                            iface.set(&uni.weight, panel.3 * 0.5);
-                            iface.set(&uni.position, [panel.1, panel.2]);
-
-                            rdr_gate.render(&RenderState::default(), |mut tess_gate| {
-                                // let view = TessView::inst_whole(&triangle, panels.len());
-                                tess_gate.render(&tess)
-                            })?;
                         }
                         Ok(())
                     })?;
