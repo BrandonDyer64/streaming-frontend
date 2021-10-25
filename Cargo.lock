@@ -3,6 +3,22 @@
 version = 3
 
 [[package]]
+name = "ab_glyph"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af0ac006645f86f20f6c6fa4dcaef920bf803df819123626f9440e35835e7d80"
+dependencies = [
+ "ab_glyph_rasterizer",
+ "owned_ttf_parser",
+]
+
+[[package]]
+name = "ab_glyph_rasterizer"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9fe5e32de01730eb1f6b7f5b51c17e03e2325bf40a74f754f04f130043affff"
+
+[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13,6 +29,15 @@ name = "adler32"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aae1277d39aeec15cb388266ecc24b11c80469deae6067e17a1a7aa9e5c1f234"
+
+[[package]]
+name = "approx"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "072df7202e63b127ab55acfe16ce97013d5b97bf160489336d3f1840fd78e99e"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "autocfg"
@@ -314,6 +339,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "glyph_brush"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e3f00b8574a76fb6c50890c48da03946ca50e4372a2778737922666a2238221"
+dependencies = [
+ "glyph_brush_draw_cache",
+ "glyph_brush_layout",
+ "log",
+ "ordered-float",
+ "rustc-hash",
+ "twox-hash",
+]
+
+[[package]]
+name = "glyph_brush_draw_cache"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac2c82074cafb68b9e459c50c655f7eedcb92d6ee7166813802934bc6fc29fa3"
+dependencies = [
+ "ab_glyph",
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "linked-hash-map",
+ "rayon",
+ "rustc-hash",
+]
+
+[[package]]
+name = "glyph_brush_layout"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc32c2334f00ca5ac3695c5009ae35da21da8c62d255b5b96d56e2597a637a38"
+dependencies = [
+ "ab_glyph",
+ "approx",
+ "xi-unicode",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -516,6 +580,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b2f96d100e1cf1929e7719b7edb3b90ab5298072638fccd77be9ce942ecdfce"
 
 [[package]]
+name = "linked-hash-map"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
+
+[[package]]
 name = "lock_api"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -535,11 +605,31 @@ dependencies = [
 
 [[package]]
 name = "luminance"
+version = "0.43.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fe4219f6b16354a910a2163a52c8c3586c728a9d61816165d59bab076880a23"
+dependencies = [
+ "luminance-derive 0.6.3",
+]
+
+[[package]]
+name = "luminance"
 version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53f17426227044c3fde0f81117f16234fce327200d00c6157c273ed6f1875891"
 dependencies = [
- "luminance-derive",
+ "luminance-derive 0.7.0",
+]
+
+[[package]]
+name = "luminance-derive"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdd6b8d5743d7d434bda65a0657d699051aba986af7a9eebadff382f399f1c52"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -559,7 +649,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ce549e34476b6495b2d6f993ce28c356e0d2a66c25cf39ab488a58d19688516"
 dependencies = [
- "luminance",
+ "luminance 0.44.1",
  "luminance-gl",
  "luminance-webgl",
 ]
@@ -571,7 +661,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf778578a4afbd0d61c6d807bc4ab88b502f40383bd1fa1ad9bf6bd31dade8b8"
 dependencies = [
  "gl",
- "luminance",
+ "luminance 0.44.1",
 ]
 
 [[package]]
@@ -582,9 +672,20 @@ checksum = "ba8c0f17ac19a7b2b92d1465ac0859039e937e1aa65b9d1252d438575d6e65e1"
 dependencies = [
  "gl",
  "glfw",
- "luminance",
+ "luminance 0.44.1",
  "luminance-gl",
  "luminance-windowing",
+]
+
+[[package]]
+name = "luminance-glyph"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78cc78e074c68fb13d4c753c98ad7088dc2cbec9797986e4c5def2c238e17d25"
+dependencies = [
+ "glyph_brush",
+ "log",
+ "luminance 0.43.2",
 ]
 
 [[package]]
@@ -594,7 +695,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c43d540b33973a0e40654d4db12159f9a214e3d339da89354e06cd8bcd532df"
 dependencies = [
  "js-sys",
- "luminance",
+ "luminance 0.44.1",
  "serde",
  "serde_derive",
  "wasm-bindgen",
@@ -607,7 +708,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11704e4e6131156444a2208f38ad3bc936a183a38f6c32073db6de880a5cb488"
 dependencies = [
- "luminance",
+ "luminance 0.44.1",
 ]
 
 [[package]]
@@ -811,6 +912,24 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "ordered-float"
+version = "2.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97c9d06878b3a851e8026ef94bf7fef9ba93062cd412601da4d9cf369b1cc62d"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "owned_ttf_parser"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60ac8dda2e5cc09bf6480e3b3feff9783db251710c922ae9369a429c51efdeb0"
+dependencies = [
+ "ttf-parser",
 ]
 
 [[package]]
@@ -1026,6 +1145,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
 name = "ryu"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1166,15 +1291,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "streaming-frontend"
 version = "0.1.0"
 dependencies = [
  "glfw",
+ "glyph_brush",
  "image",
- "luminance",
- "luminance-derive",
+ "luminance 0.44.1",
+ "luminance-derive 0.7.0",
  "luminance-front",
+ "luminance-gl",
  "luminance-glfw",
+ "luminance-glyph",
  "luminance-windowing",
  "reqwest",
  "serde",
@@ -1319,6 +1453,23 @@ name = "try-lock"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
+
+[[package]]
+name = "ttf-parser"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ae2f58a822f08abdaf668897e96a5656fe72f5a9ce66422423e8849384872e6"
+
+[[package]]
+name = "twox-hash"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f559b464de2e2bdabcac6a210d12e9b5a5973c251e102c44c585c71d51bd78e"
+dependencies = [
+ "cfg-if",
+ "rand",
+ "static_assertions",
+]
 
 [[package]]
 name = "unicode-bidi"
@@ -1487,6 +1638,12 @@ checksum = "0120db82e8a1e0b9fb3345a539c478767c0048d842860994d96113d5b667bd69"
 dependencies = [
  "winapi",
 ]
+
+[[package]]
+name = "xi-unicode"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a67300977d3dc3f8034dae89778f502b6ba20b269527b3223ba59c0cf393bb8a"
 
 [[package]]
 name = "xml-rs"
