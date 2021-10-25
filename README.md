@@ -1,5 +1,24 @@
 # streaming-frontend
 
+Consumes an API and displays media data.
+
+## Running
+
+**NOTE:** This application has only been tested on **macOS**
+
+### Cargo
+
+This should be all you need to build and run the application. It is entirely possible that there are system dependencies, but I am not aware of any.
+
+```bash
+$ cargo run
+```
+
+### Binary
+
+- Mac / Linux: ```./streaming-service```
+- Windows: There is currently no binary for windows. Please use [cargo](#Cargo)
+
 ## Screenshots
 
 ### On first open
