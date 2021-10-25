@@ -6,6 +6,8 @@ pub async fn handle_event(event: WindowEvent, state: AsyncState) -> bool {
     let mut state = state.write().await;
     match event {
         WindowEvent::Close | WindowEvent::Key(Key::Escape, _, Action::Release, _) => return false,
+        WindowEvent::Key(Key::Enter, _, Action::Press, _) => state.show_modal = true,
+        WindowEvent::Key(Key::Backspace, _, Action::Press, _) => state.show_modal = false,
         WindowEvent::Key(Key::Right, _, Action::Press | Action::Repeat, _) => {
             let new = state.selected_card.0.saturating_add(1);
             if new < state.rows[state.selected_card.1].cards.len() {
@@ -15,7 +17,7 @@ pub async fn handle_event(event: WindowEvent, state: AsyncState) -> bool {
         WindowEvent::Key(Key::Left, _, Action::Press | Action::Repeat, _) => {
             state.selected_card.0 = state.selected_card.0.saturating_sub(1);
         }
-        WindowEvent::Key(Key::Up, _, Action::Press, _) => {
+        WindowEvent::Key(Key::Up, _, Action::Press | Action::Repeat, _) => {
             let new = state.selected_card.1.saturating_sub(1);
             if new < state.rows.len() {
                 let scroll_old = state.rows[state.selected_card.1].scroll.round() as isize;
@@ -26,7 +28,7 @@ pub async fn handle_event(event: WindowEvent, state: AsyncState) -> bool {
                 state.selected_card.1 = new;
             }
         }
-        WindowEvent::Key(Key::Down, _, Action::Press, _) => {
+        WindowEvent::Key(Key::Down, _, Action::Press | Action::Repeat, _) => {
             let new = state.selected_card.1.saturating_add(1);
             if new < state.rows.len() {
                 let scroll_old = state.rows[state.selected_card.1].scroll.round() as isize;

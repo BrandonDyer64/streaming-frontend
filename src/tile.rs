@@ -22,7 +22,7 @@ use luminance_front::{pipeline::Pipeline, shader::Program, shading_gate::Shading
 use luminance_glfw::GL33Context;
 use tokio::sync::RwLock;
 
-use crate::{state, vertex::*, HEIGHT};
+use crate::{state, vertex::*, HEIGHT, WIDTH};
 
 const VS_STR: &str = include_str!("shader.vert.glsl");
 const FS_STR: &str = include_str!("shader.frag.glsl");
@@ -81,12 +81,37 @@ impl TileRenderer {
         let selected_card = state.selected_card;
         let scroll = state.scroll;
         let mut scroll_target = state.scroll_target;
+
+        if state.show_modal {
+            let card = state
+                .rows
+                .get_mut(selected_card.1)
+                .and_then(|row| row.cards.get_mut(selected_card.0));
+            if let Some(card) = card {
+                if let state::CardImage::Texture(tex_id) = card.image {
+                    card.size += (0.75 - card.size) * (1. - (1. - delta_t) * 0.7);
+                    self.tiles.push(Tile {
+                        x: -0.5,
+                        y: 0.,
+                        size: card.size,
+                        tex_id: tex_id,
+                    });
+                    glyph_brush.queue(
+                        Section::default()
+                            .add_text(Text::new(&card.title).with_scale(50.))
+                            .with_screen_position((WIDTH as f32, HEIGHT as f32 * 0.66)),
+                    );
+                    return;
+                }
+            }
+        }
+
         for (y, row) in state.rows.iter_mut().enumerate() {
             row.scroll += (row.scroll_target - row.scroll) * (1. - (1. - delta_t) * 0.9);
             row.text_height +=
                 (row.text_height_target - row.text_height) * (1. - (1. - delta_t) * 0.7);
             let y_pos = 0.6 - y as f32 * 0.6;
-            let y_ = y_pos - scroll * 0.4;
+            let y_ = y_pos - scroll * 0.6;
             if selected_card.1 == y && (selected_card.0 as f32 - row.scroll).round() as u32 == 0 {
                 row.text_height_target = 0.3;
             } else {
@@ -142,9 +167,6 @@ impl TileRenderer {
                         state::CardImage::Texture(x) => *x,
                         _ => 0,
                     };
-                    // if x == 0 && y == 0 {
-                    //     println!("{}", img_id);
-                    // }
                     self.tiles.push(Tile {
                         tex_id: img_id,
                         x: x_,
@@ -159,9 +181,9 @@ impl TileRenderer {
                     } else if x_pos - row.scroll_target * 0.4 < -0.71 {
                         row.scroll_target -= 1.;
                     }
-                    if y_pos - scroll_target * 0.4 > 0.7 {
+                    if y_pos - scroll_target * 0.6 > 0.7 {
                         scroll_target += 1.;
-                    } else if y_pos - scroll_target * 0.4 < -0.7 {
+                    } else if y_pos - scroll_target * 0.6 < -0.7 {
                         scroll_target -= 1.;
                     }
                 }

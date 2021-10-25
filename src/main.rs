@@ -1,15 +1,8 @@
 use glfw::Context as _;
 use glyph_brush::{ab_glyph::FontArc, GlyphBrush, GlyphBrushBuilder};
-use image::GenericImageView;
-use luminance::{
-    context::GraphicsContext,
-    pipeline::PipelineState,
-    texture::{GenMipmaps, Sampler},
-};
-use luminance_front::texture::Texture;
+use luminance::{context::GraphicsContext, pipeline::PipelineState};
 use luminance_glfw::GlfwSurface;
 use luminance_windowing::{WindowDim, WindowOpt};
-use std::collections::HashMap;
 use std::process::exit;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
@@ -20,6 +13,7 @@ mod api;
 mod input;
 mod model;
 mod state;
+mod tex;
 mod text;
 mod tile;
 mod vertex;
@@ -27,21 +21,23 @@ mod vertex;
 use state::*;
 use vertex::*;
 
-use crate::{text::TextRenderer, tile::TileRenderer};
+use crate::{tex::TextureHost, text::TextRenderer, tile::TileRenderer};
 
+// TODO: Use dynamic width and height
 pub const WIDTH: u32 = 960;
 pub const HEIGHT: u32 = 540;
 
 #[tokio::main]
 async fn main() {
     // our graphics surface
-    let dim = WindowDim::Windowed {
-        width: WIDTH,
-        height: HEIGHT,
-    };
     let surface = GlfwSurface::new_gl33(
         "Disney+",
-        WindowOpt::default().set_num_samples(16).set_dim(dim),
+        WindowOpt::default()
+            .set_num_samples(16)
+            .set_dim(WindowDim::Windowed {
+                width: WIDTH,
+                height: HEIGHT,
+            }),
     );
 
     match surface {
@@ -77,18 +73,17 @@ async fn main_loop(surface: GlfwSurface) {
 
     let mut text_renderer = TextRenderer::new(&mut ctxt, &mut glyph_brush);
     let mut tile_renderer = TileRenderer::new(&mut ctxt);
+    let mut texture_host = TextureHost::new();
 
     let tex_uid = AtomicU32::new(1u32);
 
-    let mut bindable_textures: HashMap<u32, RGBTexture> = HashMap::new();
-
-    let loaded_images: Arc<RwLock<Vec<(u32, image::DynamicImage)>>> =
-        Arc::new(RwLock::new(Vec::new()));
-
-    tokio::spawn(api::load_home(state.clone(), loaded_images.clone()));
+    tokio::spawn(api::load_home(
+        state.clone(),
+        texture_host.queued_images.clone(),
+    ));
 
     'app: loop {
-        // handle events
+        // Handle events
         ctxt.window.glfw.poll_events();
         for (_, event) in glfw::flush_messages(&events) {
             if !input::handle_event(event, state.clone()).await {
@@ -96,58 +91,43 @@ async fn main_loop(surface: GlfwSurface) {
             }
         }
 
-        {
-            let mut loaded_images = loaded_images.write().await;
-            for loaded_image in loaded_images.iter() {
-                let img = &loaded_image.1;
-                let (width, height) = img.dimensions();
-                let texels = img.as_bytes();
-                let new_tex: RGBTexture = Texture::new_raw(
-                    &mut ctxt,
-                    [width, height],
-                    0,
-                    Sampler::default(),
-                    GenMipmaps::No,
-                    texels,
-                )
-                .map_err(|e| println!("error while creating texture: {}", e))
-                .ok()
-                .expect("load displacement map");
-                bindable_textures.insert(loaded_image.0, new_tex);
-            }
-            loaded_images.clear();
-        }
-
+        // Timing
         let t = start_t.elapsed().as_secs_f32();
         let delta_t = t - last_t;
         last_t = t;
 
+        // Process what's to be rendered
+        texture_host.process_queued(&mut ctxt).await;
         tile_renderer
             .update_tiles(
                 delta_t,
                 state.clone(),
                 &mut glyph_brush,
                 &tex_uid,
-                loaded_images.clone(),
+                texture_host.queued_images.clone(),
             )
             .await;
-
         text_renderer.process_queued(&mut ctxt, &mut glyph_brush);
 
+        // Render pipeline
         let render = ctxt
             .new_pipeline_gate()
             .pipeline(
                 &back_buffer,
                 &PipelineState::default().set_clear_color([0.01, 0.01, 0.01, 1.]),
                 |pipeline, mut shd_gate| {
-                    tile_renderer.render(&pipeline, &mut shd_gate, &mut bindable_textures)?;
+                    tile_renderer.render(
+                        &pipeline,
+                        &mut shd_gate,
+                        &mut texture_host.bindable_textures,
+                    )?;
                     text_renderer.render(&pipeline, &mut shd_gate)?;
                     Ok(())
                 },
             )
             .assume();
 
-        // swap buffer chains
+        // Swap buffer chains
         if render.is_ok() {
             ctxt.window.swap_buffers();
         } else {
